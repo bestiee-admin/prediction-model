@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>飲食店 来店予測AIデモ (Phase 1)</title>
+    <!-- Chart.jsの読み込み -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-top: 0;
+            font-size: 24px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .info-box {
+            background-color: #e1f5fe;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .info-box h2 {
+            margin-top: 0;
+            font-size: 18px;
+            color: #0277bd;
+        }
+        .info-box p {
+            margin-bottom: 5px;
+        }
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background-color: white;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .stat-box h3 {
+            margin-top: 0;
+            font-size: 14px;
+            color: #607d8b;
+        }
+        .stat-box p.value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-box p.note {
+            font-size: 12px;
+            color: #9e9e9e;
+            margin: 0;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        .controls h2 {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .btn {
+            background-color: #e0e0e0;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        .btn.active {
+            background-color: #2196f3;
+            color: white;
+        }
+        .chart-container {
+            margin-bottom: 30px;
+            height: 400px;
+        }
+        .chart-title {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .high-error {
+            color: #e53935;
+            font-weight: bold;
+        }
+        .footer {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+        .footer h2 {
+            font-size: 18px;
+            margin-top: 0;
+        }
+        .footer ul {
+            margin-top: 5px;
+            padding-left: 25px;
+        }
+        .footer p {
+            margin-bottom: 5px;
+        }
+        @media (max-width: 768px) {
+            .stats-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>飲食店 来店予測AIデモ (Phase 1)</h1>
+        
+        <div class="info-box">
+            <h2>予測モデル概要</h2>
+            <p>過去の来店データと外部要因（天候、イベント、キャンペーン）から機械学習モデルを構築し、未来の来店数を予測します。</p>
+            <p>※このデモでは実際のAIモデルではなくシミュレーションデータを使用しています</p>
+        </div>
+        
+        <div class="stats-container">
+            <div class="stat-box">
+                <h3>総来店数</h3>
+                <p class="value" id="total-visitors">-</p>
+            </div>
+            <div class="stat-box">
+                <h3>平均来店数/日</h3>
+                <p class="value" id="avg-visitors">-</p>
+            </div>
+            <div class="stat-box">
+                <h3>予測精度 (MAPE)</h3>
+                <p class="value" id="mape">-</p>
+                <p class="note">※目標: MAPE ≦ 12%</p>
+            </div>
+            <div class="stat-box">
+                <h3>最大誤差日</h3>
+                <p class="value" id="max-error-day">-</p>
+                <p id="max-error-rate">誤差率: -%</p>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <h2>予測要因選択</h2>
+            <div class="btn-group">
+                <button class="btn active" id="weather-btn">天候影響</button>
+                <button class="btn active" id="events-btn">イベント影響</button>
+                <button class="btn active" id="campaign-btn">キャンペーン影響</button>
+            </div>
+        </div>
+        
+        <div class="chart-container">
+            <h2 class="chart-title">来店予測 vs 実績比較 (2025年4月)</h2>
+            <canvas id="prediction-chart"></canvas>
+        </div>
+        
+        <h2 class="chart-title">影響要因分析</h2>
+        <div style="overflow-x: auto;">
+            <table id="data-table">
+                <thead>
+                    <tr>
+                        <th>日付</th>
+                        <th>曜日</th>
+                        <th>天候</th>
+                        <th>イベント</th>
+                        <th>キャンペーン</th>
+                        <th>実績</th>
+                        <th>予測</th>
+                        <th>誤差率</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <!-- データはJavaScriptで動的に生成 -->
+                </tbody>
+            </table>
+        </div>
+        <p style="font-size: 12px; color: #757575;">※表示は最初の10日分のみ</p>
+        
+        <div class="footer">
+            <h2>フェーズ1成果物</h2>
+            <ul>
+                <li>過去POSデータ + 外部データを用いた来店予測AIモデル</li>
+                <li>予測精度検証レポート (MAPE指標による評価)</li>
+                <li>影響要因分析ダッシュボード</li>
+                <li>予測データのCSV出力機能</li>
+            </ul>
+            <p><strong>次フェーズへの展開</strong></p>
+            <p>フェーズ2では、この予測データを元に座席マネジメント最適化を実装します</p>
+        </div>
+    </div>
+
+    <script>
+        // サンプルデータ生成関数
+        function generateSampleData() {
+            const data = [];
+            const startDate = new Date(2025, 3, 1); // 2025年4月1日
+            
+            for (let i = 0; i < 30; i++) {
+                const currentDate = new Date(startDate);
+                currentDate.setDate(startDate.getDate() + i);
+                
+                const dayOfWeek = currentDate.getDay(); // 0:日曜, 1:月曜, ...
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                
+                // 基本来店数
+                let baseVisitors = isWeekend ? 85 : 50;
+                
+                // 曜日効果
+                const dayEffect = {
+                    0: 1.2,  // 日曜
+                    1: 0.7,  // 月曜
+                    2: 0.8,  // 火曜
+                    3: 0.9,  // 水曜
+                    4: 1.0,  // 木曜
+                    5: 1.3,  // 金曜
+                    6: 1.4   // 土曜
+                };
+                
+                // 天候効果（乱数で表現）
+                const weatherRand = Math.random();
+                let weather = '晴れ';
+                let weatherEffect = document.getElementById('weather-btn').classList.contains('active') ? 1.1 : 1.0;
+                
+                if (weatherRand < 0.2) {
+                    weather = '雨';
+                    weatherEffect = document.getElementById('weather-btn').classList.contains('active') ? 0.8 : 1.0;
+                } else if (weatherRand < 0.4) {
+                    weather = '曇り';
+                    weatherEffect = document.getElementById('weather-btn').classList.contains('active') ? 0.95 : 1.0;
+                }
+                
+                // イベント効果
+                let hasEvent = false;
+                let eventEffect = 1.0;
+                let eventName = '';
+                
+                // 特定日にイベントを設定
+                if (i === 5 || i === 20) {
+                    hasEvent = true;
+                    eventEffect = document.getElementById('events-btn').classList.contains('active') ? 1.5 : 1.0;
+                    eventName = i === 5 ? '周辺ショッピングモールセール' : '地域フェスティバル';
+                }
+                
+                // キャンペーン効果
+                let hasCampaign = false;
+                let campaignEffect = 1.0;
+                let campaignName = '';
+                
+                // 特定期間にキャンペーンを設定
+                if (i >= 10 && i <= 16) {
+                    hasCampaign = true;
+                    campaignEffect = document.getElementById('campaign-btn').classList.contains('active') ? 1.25 : 1.0;
+                    campaignName = '春の特別コースキャンペーン';
+                }
+                
+                // 実績来店数（ランダム要素も加味）
+                const actualVisitors = Math.round(
+                    baseVisitors * 
+                    dayEffect[dayOfWeek] * 
+                    weatherEffect * 
+                    eventEffect * 
+                    campaignEffect * 
+                    (0.9 + Math.random() * 0.2) // 90%～110%のランダム変動
+                );
+                
+                // 予測来店数（本来はAIモデルで予測）
+                // ここではシンプルなモデルを想定して若干のズレを入れる
+                const predictedVisitors = Math.round(
+                    baseVisitors * 
+                    dayEffect[dayOfWeek] * 
+                    weatherEffect * 
+                    eventEffect * 
+                    campaignEffect * 
+                    (0.95 + Math.random() * 0.1) // 予測誤差
+                );
+                
+                data.push({
+                    date: `${currentDate.getMonth() + 1}/${currentDate.getDate()}`,
+                    dayOfWeek: ['日', '月', '火', '水', '木', '金', '土'][dayOfWeek],
+                    weather,
+                    hasEvent,
+                    eventName,
+                    hasCampaign,
+                    campaignName,
+                    actual: actualVisitors,
+                    predicted: predictedVisitors,
+                    error: Math.abs(actualVisitors - predictedVisitors),
+                    errorRate: Math.round(Math.abs(actualVisitors - predictedVisitors) / actualVisitors * 100)
+                });
+            }
+            
+            return data;
+        }
+
+        // パフォーマンス指標の計算
+        function calculateMetrics(data) {
+            const totalActual = data.reduce((sum, item) => sum + item.actual, 0);
+            const totalError = data.reduce((sum, item) => sum + item.error, 0);
+            const mape = Math.round(data.reduce((sum, item) => sum + item.errorRate, 0) / data.length);
+            
+            const maxErrorDay = [...data].sort((a, b) => b.errorRate - a.errorRate)[0];
+            
+            return {
+                totalVisitors: totalActual,
+                avgDailyVisitors: Math.round(totalActual / data.length),
+                mape,
+                maxErrorDay
+            };
+        }
+
+        // チャート初期化関数
+        function initChart(data) {
+            const ctx = document.getElementById('prediction-chart').getContext('2d');
+            
+            if (window.myChart) {
+                window.myChart.destroy();
+            }
+            
+            window.myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(item => item.date),
+                    datasets: [
+                        {
+                            label: '実績来店数',
+                            data: data.map(item => item.actual),
+                            borderColor: '#ff7300',
+                            backgroundColor: 'rgba(255, 115, 0, 0.1)',
+                            tension: 0.1,
+                            pointRadius: 3,
+                            borderWidth: 2
+                        },
+                        {
+                            label: '予測来店数',
+                            data: data.map(item => item.predicted),
+                            borderColor: '#2196f3',
+                            backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                            tension: 0.1,
+                            pointRadius: 3,
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: function(tooltipItems) {
+                                    const idx = tooltipItems[0].dataIndex;
+                                    return `${data[idx].date} (${data[idx].dayOfWeek})`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: '来店数'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: '日付'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // テーブル更新関数
+        function updateTable(data) {
+            const tableBody = document.getElementById('table-body');
+            tableBody.innerHTML = '';
+            
+            data.slice(0, 10).forEach(item => {
+                const row = document.createElement('tr');
+                
+                row.innerHTML = `
+                    <td>${item.date}</td>
+                    <td>${item.dayOfWeek}</td>
+                    <td>${item.weather}</td>
+                    <td>${item.eventName || '-'}</td>
+                    <td>${item.campaignName || '-'}</td>
+                    <td>${item.actual}人</td>
+                    <td>${item.predicted}人</td>
+                    <td class="${item.errorRate > 10 ? 'high-error' : ''}">${item.errorRate}%</td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+
+        // 統計情報更新関数
+        function updateStats(metrics) {
+            document.getElementById('total-visitors').textContent = metrics.totalVisitors.toLocaleString() + ' 人';
+            document.getElementById('avg-visitors').textContent = metrics.avgDailyVisitors.toLocaleString() + ' 人';
+            document.getElementById('mape').textContent = metrics.mape + '%';
+            document.getElementById('max-error-day').textContent = `${metrics.maxErrorDay.date} (${metrics.maxErrorDay.dayOfWeek})`;
+            document.getElementById('max-error-rate').textContent = `誤差率: ${metrics.maxErrorDay.errorRate}%`;
+        }
+
+        // データ更新とUI再描画
+        function refreshData() {
+            const data = generateSampleData();
+            const metrics = calculateMetrics(data);
+            
+            initChart(data);
+            updateTable(data);
+            updateStats(metrics);
+        }
+
+        // ボタンイベントリスナー
+        document.querySelectorAll('.btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.classList.toggle('active');
+                refreshData();
+            });
+        });
+
+        // 初期データ読み込み
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshData();
+        });
+    </script>
+</body>
+</html>
