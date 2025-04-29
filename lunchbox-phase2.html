@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>食品製造業 製造・仕入最適化デモ (Phase 2)</title>
+    <!-- Chart.jsの読み込み -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-top: 0;
+            font-size: 24px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .info-box {
+            background-color: #e1f5fe;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .info-box h2 {
+            margin-top: 0;
+            font-size: 18px;
+            color: #0277bd;
+        }
+        .info-box p {
+            margin-bottom: 5px;
+        }
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background-color: white;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .stat-box h3 {
+            margin-top: 0;
+            font-size: 14px;
+            color: #607d8b;
+        }
+        .stat-box p.value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-box p.note {
+            font-size: 12px;
+            color: #9e9e9e;
+            margin: 0;
+        }
+        .text-success {
+            color: #4caf50;
+        }
+        .text-warning {
+            color: #ff9800;
+        }
+        .text-danger {
+            color: #f44336;
+        }
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 15px;
+        }
+        .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            border-bottom-color: #2196f3;
+            color: #2196f3;
+            font-weight: 600;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            color: white;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .alert-warning {
+            background-color: #fb8c00;
+        }
+        .alert-success {
+            background-color: #43a047;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        .btn {
+            background-color: #e0e0e0;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        .btn.active {
+            background-color: #2196f3;
+            color: white;
+        }
+        .chart-container {
+            height: 300px;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        .footer {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+        .footer h2 {
+            font-size: 18px;
+            margin-top: 0;
+        }
+        .footer ul {
+            margin-top: 5px;
+            padding-left: 25px;
+        }
+        .footer p {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>食品製造業 製造・仕入最適化デモ (Phase 2)</h1>
+        
+        <div class="info-box">
+            <h2>製造・仕入最適化概要</h2>
+            <p>フェーズ1で構築した販売予測AIモデルに基づき、製造ライン稼働と原材料仕入れを最適化するシステムです。</p>
+            <p>食材ロス削減と機会損失防止のバランスを取りながら、最適な生産計画を立案します。</p>
+        </div>
+        
+        <div id="alert-container" class="alert alert-warning">
+            <span>警告: 明日(4/30)はGW前で通常の火曜日より40%の販売増が予測されます。製造ラインのキャパシティ不足のリスクがあります。最適化を実行してください。</span>
+            <button class="close-btn" onclick="dismissAlert()">×</button>
+        </div>
+        
+        <div class="stats-container">
+            <div class="stat-box">
+                <h3>本日の生産効率</h3>
+                <p class="value" id="production-efficiency">87.3%</p>
+                <p class="note">目標: 85% 以上 <span class="text-success">✓</span></p>
+            </div>
+            <div class="stat-box">
+                <h3>原材料廃棄率</h3>
+                <p class="value" id="waste-rate">3.2%</p>
+                <p class="note">AI導入前: 8.5% <span class="text-success">-5.3pt</span></p>
+            </div>
+            <div class="stat-box">
+                <h3>製造コスト最適化</h3>
+                <p class="value" id="cost-optimization">-7.8%</p>
+                <p class="note">前月比: <span class="text-success">改善中</span></p>
+            </div>
+            <div class="stat-box">
+                <h3>製造計画精度</h3>
+                <p class="value" id="planning-accuracy">92.5%</p>
+                <p class="note">目標: 90% 以上 <span class="text-success">✓</span></p>
+            </div>
+        </div>
+        
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('production')">製造ライン最適化</div>
+            <div class="tab" onclick="switchTab('inventory')">原材料仕入計画</div>
+            <div class="tab" onclick="switchTab('forecast')">7日間予測</div>
+        </div>
+        
+        <div id="production-tab" class="tab-content active">
+            <div class="chart-container">
+                <canvas id="production-chart"></canvas>
+            </div>
+            
+            <div style="text-align: center; margin-bottom: 20px;">
+                <button class="btn active" onclick="optimizeProduction()">製造ライン最適化を実行</button>
+            </div>
+            
+            <div class="stat-box">
+                <h3 style="font-size: 16px; margin-top: 0; margin-bottom: 15px;">製造計画サマリー （4/30 特製幕の内弁当）</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">計画項目</th>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">現在値</th>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">最適化後</th>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">変化</th>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">製造数量</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">300個</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">335個</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;" class="text-success">+35個</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">製造要員数</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">3人</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">4人</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;" class="text-success">+1人</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">製造時間</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">6.0時間</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">5.5時間</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;" class="text-success">-0.5時間</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">製造コスト/個</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">685円</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">652円</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;" class="text-success">-33円</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <div id="inventory-tab" class="tab-content">
+            <div class="chart-container">
+                <canvas id="inventory-chart"></canvas>
+            </div>
+            
+            <div style="text-align: center; margin-bottom: 20px;">
+                <button class="btn active" onclick="optimizeInventory()">仕入計画最適化を実行</button>
+            </div>
+            
+            <div class="stat-box">
+                <h3 style="font-size: 16px; margin-top: 0; margin-bottom: 15px;">推奨仕入れ計画 (4/30分)</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">食材カテゴリ</th>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">現在庫</th>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">推奨発注量</th>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">通常比</th>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">米</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">15kg</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">25kg</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;" class="text-success">+40%</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">肉類</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">8kg</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">12kg</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;" class="text-success">+35%</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">魚介類</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">5kg</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">8kg</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;" class="text-success">+30%</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">野菜類</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">12kg</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">15kg</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;" class="text-success">+20%</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <div id="forecast-tab" class="tab-content">
+            <div class="chart-container">
+                <canvas id="forecast-chart"></canvas>
+            </div>
+            
+            <div class="stat-box">
+                <h3 style="font-size: 16px; margin-top: 0; margin-bottom: 15px;">リソース最適化提案</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">日付</th>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">製造要員数</th>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">対応</th>
+                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">理由</th>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">4/30 (火)</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">4人 <span class="text-success">(+1)</span></td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">要員増員</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">GW前の需要増</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">5/1 (水・祝)</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">5人 <span class="text-success">(+2)</span></td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">要員増員</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">祝日の需要急増</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">5/2 (木)</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">5人 <span class="text-success">(+1)</span></td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">要員増員</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">連休中の需要維持</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <h2>フェーズ2成果物</h2>
+            <ul>
+                <li>販売予測AIモデルと連携した製造ラインシミュレーション</li>
+                <li>生産能力・要員配置の最適化エンジン</li>
+                <li>原材料仕入計画と在庫管理の最適化</li>
+                <li>製造コスト分析と改善提案機能</li>
+                <li>7日間の生産・仕入計画ダッシュボード</li>
+            </ul>
+            <div style="margin-top: 15px;">
+                <p style="font-weight: 600;">次フェーズへの展開</p>
+                <p>フェーズ3では、リアルタイムモニタリングとアラート機能を追加し、突発的な需要変動にも即応できるシステムを構築します</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // グローバル変数
+        let productionChart;
+        let inventoryChart;
+        let forecastChart;
+        
+        // ページ読み込み時の初期化
+        window.onload = function() {
+            createProductionChart();
+            createInventoryChart();
+            createForecastChart();
+        };
+        
+        // 製造ラインチャート
+        function createProductionChart() {
+            const ctx = document.getElementById('production-chart').getContext('2d');
+            
+            if (productionChart) {
+                productionChart.destroy();
+            }
+            
+            productionChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['材料準備', 'ご飯調理', 'おかず調理', '盛り付け', '包装・梱包'],
+                    datasets: [
+                        {
+                            label: '現在の稼働率',
+                            data: [75, 65, 90, 85, 70],
+                            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '最適化後の稼働率',
+                            data: [80, 70, 85, 85, 75],
+                            backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '製造ライン稼働率分析'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: '稼働率 (%)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 仕入れ在庫チャート
+        function createInventoryChart() {
+            const ctx = document.getElementById('inventory-chart').getContext('2d');
+            
+            if (inventoryChart) {
+                inventoryChart.destroy();
+            }
+            
+            inventoryChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['米', '肉類', '魚介類', '野菜類', '調味料', 'タレ・ソース', '卵', '海苔', 'パッケージ材'],
+                    datasets: [
+                        {
+                            label: '現在のコスト',
+                            data: [100, 100, 100, 100, 100, 100, 100, 100, 100],
+                            backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '最適化後のコスト',
+                            data: [80, 85, 95, 90, 85, 88, 82, 85, 75],
+                            backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '原材料仕入れコスト分析'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: '相対コスト (%)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 予測チャート
+        function createForecastChart() {
+            const ctx = document.getElementById('forecast-chart').getContext('2d');
+            
+            if (forecastChart) {
+                forecastChart.destroy();
+            }
+            
+            forecastChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['4/30', '5/1', '5/2', '5/3', '5/4', '5/5', '5/6'],
+                    datasets: [
+                        {
+                            label: '需要予測',
+                            data: [335, 418, 385, 425, 440, 380, 210],
+                            backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 1,
+                            order: 2
+                        },
+                        {
+                            label: '生産能力',
+                            data: [350, 440, 400, 450, 450, 400, 350],
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 2,
+                            type: 'line',
+                            order: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '7日間の需要予測と生産能力'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: '数量 (個)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 製造最適化の実行
+        function optimizeProduction() {
+            // アラート表示
+            showAlert('製造ライン最適化が完了しました。おかず調理工程のボトルネックが解消されました。', 'success');
+            
+            // チャートの更新
+            createProductionChart();
+        }
+        
+        // 在庫最適化の実行
+        function optimizeInventory() {
+            // アラート表示
+            showAlert('在庫・発注計画最適化が完了しました。在庫不足リスクが軽減されました。', 'success');
+            
+            // チャートの更新
+            createInventoryChart();
+        }
+        
+        // アラートの表示
+        function showAlert(message, type) {
+            const alert = document.getElementById('alert-container');
+            
+            // クラスのリセット
+            alert.classList.remove('alert-warning', 'alert-success');
+            
+            // 新しいクラスとメッセージを設定
+            alert.classList.add('alert-' + type);
+            alert.querySelector('span').innerHTML = message;
+        }
+        
+        // アラートの非表示
+        function dismissAlert() {
+            document.getElementById('alert-container').style.display = 'none';
+        }
+        
+        // タブ切り替え
+        function switchTab(tabId) {
+            // すべてのタブを非アクティブ化
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // すべてのタブコンテンツを非表示
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // 選択したタブをアクティブ化
+            document.querySelector(`.tab[onclick="switchTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(`${tabId}-tab`).classList.add('active');
+        }
+    </script>
+</body>
+</html>
