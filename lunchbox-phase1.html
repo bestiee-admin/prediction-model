@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>食品製造業 販売予測AIデモ (Phase 1)</title>
+    <!-- Chart.jsの読み込み -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-top: 0;
+            font-size: 24px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .info-box {
+            background-color: #e1f5fe;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .info-box h2 {
+            margin-top: 0;
+            font-size: 18px;
+            color: #0277bd;
+        }
+        .info-box p {
+            margin-bottom: 5px;
+        }
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background-color: white;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .stat-box h3 {
+            margin-top: 0;
+            font-size: 14px;
+            color: #607d8b;
+        }
+        .stat-box p.value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-box p.note {
+            font-size: 12px;
+            color: #9e9e9e;
+            margin: 0;
+        }
+        .text-success {
+            color: #4caf50;
+        }
+        .text-warning {
+            color: #ff9800;
+        }
+        .text-danger {
+            color: #f44336;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        .controls h2 {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .btn {
+            background-color: #e0e0e0;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        .btn.active {
+            background-color: #2196f3;
+            color: white;
+        }
+        .chart-container {
+            margin-bottom: 30px;
+            height: 400px;
+        }
+        .chart-title {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .high-error {
+            color: #e53935;
+            font-weight: bold;
+        }
+        .footer {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+        .footer h2 {
+            font-size: 18px;
+            margin-top: 0;
+        }
+        .footer ul {
+            margin-top: 5px;
+            padding-left: 25px;
+        }
+        .footer p {
+            margin-bottom: 5px;
+        }
+        @media (max-width: 768px) {
+            .stats-container {
+                grid-template-columns: 1fr;
+            }
+        }
+        .chart-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .chart-toggle .btn {
+            flex: 1;
+            text-align: center;
+        }
+        .factors-chart-container {
+            height: 300px;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            color: white;
+            font-weight: 500;
+        }
+        .alert-success {
+            background-color: #43a047;
+        }
+        .alert-warning {
+            background-color: #fb8c00;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        @media (min-width: 1024px) {
+            .grid-cols-2 {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 15px;
+        }
+        .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            border-bottom-color: #2196f3;
+            color: #2196f3;
+            font-weight: 600;
+        }
+        .product-selector {
+            margin-bottom: 20px;
+        }
+        .product-selector select {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+            width: 100%;
+            max-width: 300px;
+        }
+        .date-picker {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .date-picker input {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        .progress-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .progress-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100px;
+        }
+        .progress-circle {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .progress-circle.active {
+            background-color: #2196f3;
+        }
+        .progress-circle.completed {
+            background-color: #4caf50;
+        }
+        .progress-label {
+            font-size: 12px;
+            text-align: center;
+        }
+        .forecast-table td, .forecast-table th {
+            text-align: center;
+        }
+        .forecast-table td:first-child, .forecast-table th:first-child {
+            text-align: left;
+        }
+        .inventory-risk {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .risk-high {
+            background-color: #f44336;
+        }
+        .risk-medium {
+            background-color: #ff9800;
+        }
+        .risk-low {
+            background-color: #4caf50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>食品製造業 販売予測AIデモ (Phase 1)</h1>
+        
+        <div class="info-box">
+            <h2>予測モデル概要</h2>
+            <p>過去の販売データと外部要因（天候、曜日、イベント等）から機械学習モデルを構築し、「今日・明日・今週」の短期販売数を予測します。</p>
+            <p>※このデモではシミュレーションデータを使用しています</p>
+        </div>
+        
+        <div id="ai-alert" class="alert alert-warning" style="display: block;">
+            AIモデルアラート：明日（4/30）の駅弁販売は、5月連休前のため通常火曜日より40%増加が予測されます。製造・仕入れ量の調整を推奨します。
+        </div>
+        
+        <div class="product-selector">
+            <h2 style="margin-bottom: 10px;">商品選択</h2>
+            <select id="product-select" onchange="changeProduct()">
+                <option value="bento1">特製幕の内弁当</option>
+                <option value="bento2">季節の海鮮弁当</option>
+                <option value="bento3">牛肉重</option>
+                <option value="catering1">オードブルセット（小）</option>
+                <option value="catering2">オードブルセット（大）</option>
+            </select>
+        </div>
+        
+        <div class="date-picker">
+            <span>期間:</span>
+            <input type="date" id="start-date" value="2025-04-01">
+            <span>〜</span>
+            <input type="date" id="end-date" value="2025-04-30">
+            <button class="btn active" onclick="updateDateRange()">適用</button>
+        </div>
+        
+        <div class="stats-container">
+            <div class="stat-box">
+                <h3>本日の予測販売数</h3>
+                <p class="value" id="today-forecast">245個</p>
+                <p class="note">前週同曜日比: <span class="text-success">+6.5%</span></p>
+            </div>
+            <div class="stat-box">
+                <h3>明日の予測販売数</h3>
+                <p class="value" id="tomorrow-forecast">320個</p>
+                <p class="note">前週同曜日比: <span class="text-warning">+42.2%</span></p>
+            </div>
+            <div class="stat-box">
+                <h3>予測精度 (MAPE)</h3>
+                <p class="value" id="mape">8.2%</p>
+                <p class="note">目標: MAPE ≦ 12% <span class="text-success">✓</span></p>
+            </div>
+            <div class="stat-box">
+                <h3>食材ロス改善率</h3>
+                <p class="value" id="loss-reduction">-32%</p>
+                <p class="note">AI導入前比較（3/15-4/15データ）</p>
+            </div>
+        </div>
+        
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('forecast')">販売予測分析</div>
+            <div class="tab" onclick="switchTab('factors')">影響要因分析</div>
+            <div class="tab" onclick="switchTab('production')">製造・仕入計画</div>
+        </div>
+        
+        <div id="forecast-tab" class="tab-content active">
+            <div class="controls">
+                <h2>予測要因選択</h2>
+                <div class="btn-group">
+                    <button id="weather-btn" class="btn active" onclick="toggleFactor('weather')">天候影響</button>
+                    <button id="calendar-btn" class="btn active" onclick="toggleFactor('calendar')">曜日・祝日影響</button>
+                    <button id="events-btn" class="btn active" onclick="toggleFactor('events')">イベント影響</button>
+                    <button id="traffic-btn" class="btn active" onclick="toggleFactor('traffic')">交通量影響</button>
+                </div>
+            </div>
+            
+            <div class="chart-toggle">
+                <button id="daily-btn" class="btn active" onclick="showDailyChart()">日別</button>
+                <button id="weekly-btn" class="btn" onclick="showWeeklyChart()">週別</button>
+                <button id="dow-btn" class="btn" onclick="showDOWChart()">曜日別</button>
+            </div>
+            
+            <div class="chart-container">
+                <h2 class="chart-title">販売予測 vs 実績比較 (2025年4月)</h2>
+                <canvas id="prediction-chart"></canvas>
+            </div>
+            
+            <div class="chart-container" style="height: 300px; display: none;" id="weekly-chart-container">
+                <h2 class="chart-title">週別販売予測 (2025年4月)</h2>
+                <canvas id="weekly-chart"></canvas>
+            </div>
+            
+            <div class="chart-container" style="height: 300px; display: none;" id="dow-chart-container">
+                <h2 class="chart-title">曜日別販売傾向 (2025年4月)</h2>
+                <canvas id="dow-chart"></canvas>
+            </div>
+            
+            <div style="overflow-x: auto;">
+                <h2 class="chart-title">日別予測精度詳細</h2>
+                <table id="forecast-table">
+                    <thead>
+                        <tr>
+                            <th>日付</th>
+                            <th>曜日</th>
+                            <th>天候</th>
+                            <th>特記事項</th>
+                            <th>実績</th>
+                            <th>予測</th>
+                            <th>誤差率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="forecast-table-body">
+                        <!-- データはJavaScriptで動的に生成 -->
+                    </tbody>
+                </table>
+            </div>
+            <p style="font-size: 12px; color: #757575; margin-top: 5px;">※表示は最初の10日分のみ</p>
+        </div>
+        
+        <div id="factors-tab" class="tab-content">
+            <div class="grid grid-cols-2">
+                <div>
+                    <h2 class="chart-title">販売数への影響要因</h2>
+                    <div class="factors-chart-container">
+                        <canvas id="factors-chart"></canvas>
+                    </div>
+                    <p style="font-size: 14px; color: #666;">
+                        AIモデルによる各要因の重要度分析結果。曜日効果と祝日の影響が最も大きく、天候や周辺イベントも短期的な販売数変動に影響しています。
+                    </p>
+                </div>
+                <div>
+                    <h2 class="chart-title">天候別販売数影響</h2>
+                    <div class="factors-chart-container">
+                        <canvas id="weather-chart"></canvas>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>天候</th>
+                                    <th>影響度</th>
+                                    <th>影響の詳細</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>晴れ</td>
+                                    <td><span class="text-success">+8.3%</span></td>
+                                    <td>外出増加、駅利用者増</td>
+                                </tr>
+                                <tr>
+                                    <td>曇り</td>
+                                    <td><span>±0%</span></td>
+                                    <td>基準値（平均的な販売数）</td>
+                                </tr>
+                                <tr>
+                                    <td>雨</td>
+                                    <td><span class="text-danger">-12.5%</span></td>
+                                    <td>外出減少、予約キャンセル増</td>
+                                </tr>
+                                <tr>
+                                    <td>大雨</td>
+                                    <td><span class="text-danger">-25.8%</span></td>
+                                    <td>大幅減少、仕出し配達遅延リスク</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 30px;">
+                <h2 class="chart-title">販売予測モデル - 特異日分析</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>日付</th>
+                            <th>予測誤差</th>
+                            <th>特異要因</th>
+                            <th>AIによる分析</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>4/1 (月)</td>
+                            <td class="high-error">21.3%</td>
+                            <td>年度始め、周辺企業移動</td>
+                            <td>年度替わりによる一時的な需要増加</td>
+                        </tr>
+                        <tr>
+                            <td>4/10 (水)</td>
+                            <td class="high-error">17.8%</td>
+                            <td>臨時列車運行（修学旅行シーズン）</td>
+                            <td>学生団体の一時的な流入増加</td>
+                        </tr>
+                        <tr>
+                            <td>4/20 (土)</td>
+                            <td class="high-error">15.2%</td>
+                            <td>駅周辺イベント開催</td>
+                            <td>地域イベントによる駅利用者増加</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p style="font-size: 14px; margin-top: 10px;">
+                    AIモデルは継続的に学習を行い、特異日のパターンを認識・学習することで予測精度を向上させています。次回の類似イベント時には予測精度が向上します。
+                </p>
+            </div>
+        </div>
+        
+        <div id="production-tab" class="tab-content">
+            <h2 style="margin-top: 0;">明日以降の製造・仕入計画推奨</h2>
+            
+            <div class="progress-indicator">
+                <div class="progress-step">
+                    <div class="progress-circle completed">1</div>
+                    <div class="progress-label">販売予測</div>
+                </div>
+                <div class="progress-step">
+                    <div class="progress-circle completed">2</div>
+                    <div class="progress-label">食材必要量計算</div>
+                </div>
+                <div class="progress-step">
+                    <div class="progress-circle active">3</div>
+                    <div class="progress-label">製造計画最適化</div>
+                </div>
+                <div class="progress-step">
+                    <div class="progress-circle">4</div>
+                    <div class="progress-label">仕入発注推奨</div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2">
+                <div class="stat-box" style="height: 100%;">
+                    <h2 style="font-size: 18px; margin-top: 0; margin-bottom: 15px;">3日間の製造計画推奨</h2>
+                    <table class="forecast-table">
+                        <thead>
+                            <tr>
+                                <th>日付</th>
+                                <th>予測販売数</th>
+                                <th>推奨製造数</th>
+                                <th>必要製造要員</th>
+                                <th>食材ロスリスク</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>4/30 (火)</td>
+                                <td>320個</td>
+                                <td>335個 <span class="text-success">(+15)</span></td>
+                                <td>4人 <span class="text-success">(+1)</span></td>
+                                <td><span class="inventory-risk risk-low"></span>低</td>
+                            </tr>
+                            <tr>
+                                <td>5/1 (水・祝)</td>
+                                <td>418個</td>
+                                <td>440個 <span class="text-success">(+22)</span></td>
+                                <td>5人 <span class="text-success">(+2)</span></td>
+                                <td><span class="inventory-risk risk-low"></span>低</td>
+                            </tr>
+                            <tr>
+                                <td>5/2 (木)</td>
+                                <td>385個</td>
+                                <td>400個 <span class="text-success">(+15)</span></td>
+                                <td>5人 <span class="text-success">(+1)</span></td>
+                                <td><span class="inventory-risk risk-medium"></span>中</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p style="font-size: 14px; margin-top: 15px;">
+                        <strong>注意点:</strong> GW期間（5/1～5/5）は販売数増加が見込まれるため、製造体制の強化が必要です。
+                    </p>
+                </div>
+                
+                <div class="stat-box" style="height: 100%;">
+                    <h2 style="font-size: 18px; margin-top: 0; margin-bottom: 15px;">推奨仕入れ計画 (4/30分)</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>食材カテゴリ</th>
+                                <th>現在庫</th>
+                                <th>推奨発注量</th>
+                                <th>通常比</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>米</td>
+                                <td>15kg</td>
+                                <td>25kg</td>
+                                <td><span class="text-success">+40%</span></td>
+                            </tr>
+                            <tr>
+                                <td>肉類</td>
+                                <td>8kg</td>
+                                <td>12kg</td>
+                                <td><span class="text-success">+35%</span></td>
+                            </tr>
+                            <tr>
+                                <td>魚介類</td>
+                                <td>5kg</td>
+                                <td>8kg</td>
+                                <td><span class="text-success">+30%</span></td>
+                            </tr>
+                            <tr>
+                                <td>野菜類</td>
+                                <td>12kg</td>
+                                <td>15kg</td>
+                                <td><span class="text-success">+20%</span></td>
+                            </tr>
+                            <tr>
+                                <td>調味料</td>
+                                <td>充分</td>
+                                <td>-</td>
+                                <td><span>±0%</span></td>
+                            </tr>
+                            <tr>
+                                <td>パッケージ材</td>
+                                <td>250個</td>
+                                <td>200個</td>
+                                <td><span class="text-success">+25%</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <div style="margin-top: 20px;">
+                        <h3 style="font-size: 16px;">廃棄リスク予測</h3>
+                        <div class="factors-chart-container" style="height: 200px;">
+                            <canvas id="waste-chart"></canvas>
+                        </div>
+                        <p style="font-size: 14px; margin-top: 10px;">
+                            <strong>推奨アクション:</strong> GW期間中（5/1～5/5）は需要増加が見込まれるため、特に生鮮食材の仕入れを段階的に行い、廃棄リスクを分散させることを推奨します。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <h2>フェーズ1成果物</h2>
+            <ul>
+                <li>過去販売データ × 外部要因（天候、曜日、祝日、イベント等）を活用した販売予測AIモデル</li>
+                <li>予測精度検証レポート (MAPE指標による評価)</li>
+                <li>影響要因分析ダッシュボード</li>
+                <li>仕入れ・製造計画の最適化レコメンデーション</li>
+                <li>廃棄ロスリスク予測と対策提案</li>
+            </ul>
+            <div style="margin-top: 15px;">
+                <p style="font-weight: 600;">次フェーズへの展開</p>
+                <p>フェーズ2では、この予測データを元に製造ラインシミュレーションと要員配置最適化を実装します</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // グローバル変数
+        let predictionChart;
+        let weeklyChart;
+        let dowChart;
+        let factorsChart;
+        let weatherChart;
+        let wasteChart;
+        let salesData = [];
+        let factorToggles = {
+            weather: true,
+            calendar: true,
+            events: true,
+            traffic: true
+        };
+        let currentProduct = 'bento1';
+        
+        // 製品データ
+        const productData = {
+            'bento1': { name: '特製幕の内弁当', basePrice: 1200, avgSales: 250 },
+            'bento2': { name: '季節の海鮮弁当', basePrice: 1500, avgSales: 180 },
+            'bento3': { name: '牛肉重', basePrice: 1300, avgSales: 210 },
+            'catering1': { name: 'オードブルセット（小）', basePrice: 3800, avgSales: 45 },
+            'catering2': { name: 'オードブルセット（大）', basePrice: 6500, avgSales: 20 }
+        };
+        
+        // ページ読み込み時の初期化
+        window.onload = function() {
+            generateData();
+            createPredictionChart();
+            createWeeklyChart();
+            createDOWChart();
+            createFactorsChart();
+            createWeatherChart();
+            createWasteChart();
+            populateTable();
+        };
+        
+        // サンプルデータの生成
+        function generateData() {
+            salesData = [];
+            const startDate = new Date(2025, 3, 1); // 2025年4月1日
+            const productInfo = productData[currentProduct];
+            
+            for (let i = 0; i < 30; i++) {
+                const currentDate = new Date(startDate);
+                currentDate.setDate(startDate.getDate() + i);
+                
+                const dayOfWeek = currentDate.getDay(); // 0:日曜, 1:月曜, ...
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                
+                // 基本販売数
+                let baseSales = isWeekend ? Math.round(productInfo.avgSales * 1.4) : productInfo.avgSales;
+                
+                // 曜日効果
+                const dayEffect = {
+                    0: 1.3,  // 日曜
+                    1: 0.8,  // 月曜
+                    2: 0.85, // 火曜
+                    3: 0.9,  // 水曜
+                    4: 1.0,  // 木曜
+                    5: 1.4,  // 金曜
+                    6: 1.5   // 土曜
+                };
+                
+                // 祝日効果（特定日を祝日と設定）
+                let holidayEffect = 1.0;
+                if (i === 28 || i === 29) { // 4/29, 4/30を昭和の日と振替休日に設定
+                    holidayEffect = factorToggles.calendar ? 1.6 : 1.0;
+                }
+                
+                // 天候効果（乱数で表現）
+                const weatherRand = Math.random();
+                let weather = '晴れ';
+                let weatherEffect = factorToggles.weather ? 1.08 : 1.0;
+                
+                if (weatherRand < 0.2) {
+                    weather = '雨';
+                    weatherEffect = factorToggles.weather ? 0.88 : 1.0;
+                } else if (weatherRand < 0.4) {
+                    weather = '曇り';
+                    weatherEffect = factorToggles.weather ? 0.95 : 1.0;
+                }
+                
+                // イベント効果
+                let hasEvent = false;
+                let eventEffect = 1.0;
+                let eventName = '';
+                
+                // 特定日にイベントを設定
+                if (i === 10 || i === 20) {
+                    hasEvent = true;
+                    eventEffect = factorToggles.events ? 1.25 : 1.0;
+                    eventName = i === 10 ? '周辺イベント' : '大型連休前';
+                }
+                
+                // 交通量効果（平日の朝夕、休日は終日増加）
+                let trafficEffect = 1.0;
+                if (isWeekend) {
+                    trafficEffect = factorToggles.traffic ? 1.15 : 1.0;
+                } else {
+                    trafficEffect = factorToggles.traffic ? 1.05 : 1.0;
+                }
+                
+                // 実績販売数（ランダム要素も加味）
+                const actualSales = Math.round(
+                    baseSales * 
+                    dayEffect[dayOfWeek] * 
+                    holidayEffect *
+                    weatherEffect * 
+                    eventEffect * 
+                    trafficEffect * 
+                    (0.9 + Math.random() * 0.2) // 90%～110%のランダム変動
+                );
+                
+                // 予測販売数（本来はAIモデルで予測）
+                // ここではシンプルなモデルを想定して若干のズレを入れる
+                const predictedSales = Math.round(
+                    baseSales * 
+                    dayEffect[dayOfWeek] * 
+                    holidayEffect *
+                    weatherEffect * 
+                    eventEffect * 
+                    trafficEffect * 
+                    (0.95 + Math.random() * 0.1) // 予測誤差
+                );
+                
+                // GW直前は特別に販売数を増加（4/30）
+                let specialNote = '';
+                if (i === 29) { // 4/30
+                    specialNote = 'GW直前';
+                }
+                
+                salesData.push({
+                    date: `${currentDate.getMonth() + 1}/${currentDate.getDate()}`,
+                    dayOfWeek: ['日', '月', '火', '水', '木', '金', '土'][dayOfWeek],
+                    weather,
+                    hasEvent,
+                    eventName,
+                    specialNote,
+                    actual: actualSales,
+                    predicted: predictedSales,
+                    error: Math.abs(actualSales - predictedSales),
+                    errorRate: Math.round(Math.abs(actualSales - predictedSales) / actualSales * 100)
+                });
+            }
+            
+            // KPI値の更新
+            updateKPIs();
+        }
+        
+        // KPI値の更新
+        function updateKPIs() {
+            // 本日（4/29）と明日（4/30）の予測値を設定
+            const todayForecast = Math.round(productData[currentProduct].avgSales * 1.3);
+            const tomorrowForecast = Math.round(productData[currentProduct].avgSales * 1.8);
+            
+            document.getElementById('today-forecast').textContent = todayForecast + '個';
+            document.getElementById('tomorrow-forecast').textContent = tomorrowForecast + '個';
+            
+            // MAPE計算
+            const mape = Math.round(salesData.reduce((sum, item) => sum + item.errorRate, 0) / salesData.length);
+            document.getElementById('mape').textContent = mape + '%';
+            
+            // 食材ロス改善率（シミュレーション）
+            document.getElementById('loss-reduction').textContent = '-32%';
+        }
+        
+        // 日別予測チャートの作成
+        function createPredictionChart() {
+            const ctx = document.getElementById('prediction-chart').getContext('2d');
+            
+            if (predictionChart) {
+                predictionChart.destroy();
+            }
+            
+            predictionChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: salesData.map(item => item.date),
+                    datasets: [
+                        {
+                            label: '実績販売数',
+                            data: salesData.map(item => item.actual),
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 2,
+                            tension: 0.1
+                        },
+                        {
+                            label: '予測販売数',
+                            data: salesData.map(item => item.predicted),
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 2,
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: '販売数（個）'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: '日付'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const index = context.dataIndex;
+                                    const item = salesData[index];
+                                    return [
+                                        `天候: ${item.weather}`,
+                                        item.hasEvent ? `イベント: ${item.eventName}` : '',
+                                        item.specialNote ? `特記事項: ${item.specialNote}` : '',
+                                        `誤差率: ${item.errorRate}%`
+                                    ].filter(line => line !== '');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 週別販売予測チャート
+        function createWeeklyChart() {
+            const ctx = document.getElementById('weekly-chart').getContext('2d');
+            
+            // 週別データの集計
+            const weeklyData = [
+                { week: '第1週', actual: 0, predicted: 0, count: 0 },
+                { week: '第2週', actual: 0, predicted: 0, count: 0 },
+                { week: '第3週', actual: 0, predicted: 0, count: 0 },
+                { week: '第4週', actual: 0, predicted: 0, count: 0 },
+                { week: '第5週', actual: 0, predicted: 0, count: 0 }
+            ];
+            
+            salesData.forEach((item, index) => {
+                const weekIndex = Math.floor(index / 7);
+                if (weekIndex < weeklyData.length) {
+                    weeklyData[weekIndex].actual += item.actual;
+                    weeklyData[weekIndex].predicted += item.predicted;
+                    weeklyData[weekIndex].count++;
+                }
+            });
+            
+            if (weeklyChart) {
+                weeklyChart.destroy();
+            }
+            
+            weeklyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: weeklyData.map(item => item.week),
+                    datasets: [
+                        {
+                            label: '実績販売数',
+                            data: weeklyData.map(item => item.actual),
+                            backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '予測販売数',
+                            data: weeklyData.map(item => item.predicted),
+                            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: '週間販売数'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 曜日別販売傾向チャート
+        function createDOWChart() {
+            const ctx = document.getElementById('dow-chart').getContext('2d');
+            
+            // 曜日別データの集計
+            const dowData = [0, 0, 0, 0, 0, 0, 0]; // 日〜土
+            const dowCounts = [0, 0, 0, 0, 0, 0, 0];
+            
+            salesData.forEach(item => {
+                const dayIndex = ['日', '月', '火', '水', '木', '金', '土'].indexOf(item.dayOfWeek);
+                if (dayIndex >= 0) {
+                    dowData[dayIndex] += item.actual;
+                    dowCounts[dayIndex]++;
+                }
+            });
+            
+            // 平均値の計算
+            const dowAvg = dowData.map((total, i) => dowCounts[i] > 0 ? Math.round(total / dowCounts[i]) : 0);
+            
+            if (dowChart) {
+                dowChart.destroy();
+            }
+            
+            dowChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['日曜', '月曜', '火曜', '水曜', '木曜', '金曜', '土曜'],
+                    datasets: [
+                        {
+                            label: '平均販売数',
+                            data: dowAvg,
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.7)',
+                                'rgba(75, 192, 192, 0.7)',
+                                'rgba(75, 192, 192, 0.7)',
+                                'rgba(75, 192, 192, 0.7)',
+                                'rgba(75, 192, 192, 0.7)',
+                                'rgba(54, 162, 235, 0.7)',
+                                'rgba(255, 99, 132, 0.7)'
+                            ],
+                            borderColor: [
+                                'rgb(255, 99, 132)',
+                                'rgb(75, 192, 192)',
+                                'rgb(75, 192, 192)',
+                                'rgb(75, 192, 192)',
+                                'rgb(75, 192, 192)',
+                                'rgb(54, 162, 235)',
+                                'rgb(255, 99, 132)'
+                            ],
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: '平均販売数'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const index = context.dataIndex;
+                                    const dayName = ['日曜', '月曜', '火曜', '水曜', '木曜', '金曜', '土曜'][index];
+                                    const weekendPremium = index === 0 || index === 5 || index === 6 ? '週末効果: +30〜50%' : '';
+                                    return weekendPremium ? [weekendPremium] : [];
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 影響要因チャート
+        function createFactorsChart() {
+            const ctx = document.getElementById('factors-chart').getContext('2d');
+            
+            if (factorsChart) {
+                factorsChart.destroy();
+            }
+            
+            factorsChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['曜日・祝日', '天候', '交通量', 'イベント', '季節要因', 'その他'],
+                    datasets: [{
+                        data: [35.2, 16.4, 22.8, 10.5, 7.6, 7.5],
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.7)',
+                            'rgba(54, 162, 235, 0.7)',
+                            'rgba(255, 206, 86, 0.7)',
+                            'rgba(75, 192, 192, 0.7)',
+                            'rgba(153, 102, 255, 0.7)',
+                            'rgba(255, 159, 64, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(54, 162, 235, 1)',
+                            'rgba(255, 206, 86, 1)',
+                            'rgba(75, 192, 192, 1)',
+                            'rgba(153, 102, 255, 1)',
+                            'rgba(255, 159, 64, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.formattedValue || '';
+                                    return `${label}: ${value}%`;
+                                }
+                            }
+                        },
+                        legend: {
+                            position: 'right',
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 天候別販売数影響チャート
+        function createWeatherChart() {
+            const ctx = document.getElementById('weather-chart').getContext('2d');
+            
+            if (weatherChart) {
+                weatherChart.destroy();
+            }
+            
+            weatherChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['晴れ', '曇り', '雨', '大雨'],
+                    datasets: [{
+                        label: '販売数影響度',
+                        data: [8.3, 0, -12.5, -25.8],
+                        backgroundColor: [
+                            'rgba(255, 193, 7, 0.7)',
+                            'rgba(158, 158, 158, 0.7)',
+                            'rgba(3, 169, 244, 0.7)',
+                            'rgba(13, 71, 161, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 193, 7, 1)',
+                            'rgba(158, 158, 158, 1)',
+                            'rgba(3, 169, 244, 1)',
+                            'rgba(13, 71, 161, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            title: {
+                                display: true,
+                                text: '影響度 (%)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 廃棄リスク予測チャート
+        function createWasteChart() {
+            const ctx = document.getElementById('waste-chart').getContext('2d');
+            
+            if (wasteChart) {
+                wasteChart.destroy();
+            }
+            
+            wasteChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['4/30', '5/1', '5/2', '5/3', '5/4', '5/5', '5/6'],
+                    datasets: [
+                        {
+                            label: '予測販売数',
+                            data: [320, 418, 385, 425, 440, 380, 210],
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 2,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: '廃棄リスク',
+                            data: [4, 3, 8, 5, 7, 12, 22],
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 2,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: '予測販売数'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: '廃棄リスク (%)'
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            max: 30,
+                            min: 0
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 表にデータを入力
+        function populateTable() {
+            const tableBody = document.getElementById('forecast-table-body');
+            tableBody.innerHTML = '';
+            
+            salesData.slice(0, 10).forEach((item, index) => {
+                const row = document.createElement('tr');
+                
+                let specialInfo = '';
+                if (item.hasEvent) {
+                    specialInfo = item.eventName;
+                } else if (item.specialNote) {
+                    specialInfo = item.specialNote;
+                }
+                
+                row.innerHTML = `
+                    <td>${item.date}</td>
+                    <td>${item.dayOfWeek}</td>
+                    <td>${item.weather}</td>
+                    <td>${specialInfo || '-'}</td>
+                    <td>${item.actual}個</td>
+                    <td>${item.predicted}個</td>
+                    <td class="${item.errorRate > 10 ? 'high-error' : ''}">${item.errorRate}%</td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+        
+        // 製品変更
+        function changeProduct() {
+            const select = document.getElementById('product-select');
+            currentProduct = select.value;
+            
+            // データの再生成と描画の更新
+            generateData();
+            createPredictionChart();
+            createWeeklyChart();
+            createDOWChart();
+            populateTable();
+            
+            // アラートメッセージの更新
+            updateAlertMessage();
+        }
+        
+        // 予測要因トグル
+        function toggleFactor(factor) {
+            const btn = document.getElementById(`${factor}-btn`);
+            btn.classList.toggle('active');
+            
+            factorToggles[factor] = btn.classList.contains('active');
+            
+            // データの再生成と描画の更新
+            generateData();
+            createPredictionChart();
+            createWeeklyChart();
+            createDOWChart();
+            populateTable();
+        }
+        
+        // 日別チャート表示
+        function showDailyChart() {
+            document.getElementById('daily-btn').classList.add('active');
+            document.getElementById('weekly-btn').classList.remove('active');
+            document.getElementById('dow-btn').classList.remove('active');
+            
+            document.getElementById('prediction-chart').parentElement.style.display = 'block';
+            document.getElementById('weekly-chart-container').style.display = 'none';
+            document.getElementById('dow-chart-container').style.display = 'none';
+        }
+        
+        // 週別チャート表示
+        function showWeeklyChart() {
+            document.getElementById('daily-btn').classList.remove('active');
+            document.getElementById('weekly-btn').classList.add('active');
+            document.getElementById('dow-btn').classList.remove('active');
+            
+            document.getElementById('prediction-chart').parentElement.style.display = 'none';
+            document.getElementById('weekly-chart-container').style.display = 'block';
+            document.getElementById('dow-chart-container').style.display = 'none';
+        }
+        
+        // 曜日別チャート表示
+        function showDOWChart() {
+            document.getElementById('daily-btn').classList.remove('active');
+            document.getElementById('weekly-btn').classList.remove('active');
+            document.getElementById('dow-btn').classList.add('active');
+            
+            document.getElementById('prediction-chart').parentElement.style.display = 'none';
+            document.getElementById('weekly-chart-container').style.display = 'none';
+            document.getElementById('dow-chart-container').style.display = 'block';
+        }
+        
+        // タブ切り替え
+        function switchTab(tabId) {
+            // すべてのタブを非アクティブ化
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // すべてのタブコンテンツを非表示
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // 選択したタブをアクティブ化
+            document.querySelector(`.tab[onclick="switchTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(`${tabId}-tab`).classList.add('active');
+        }
+        
+        // 日付範囲の更新
+        function updateDateRange() {
+            // 実際のデモでは日付範囲に応じたデータ取得処理を行う
+            // ここではシミュレーションのみ
+            generateData();
+            createPredictionChart();
+            createWeeklyChart();
+            createDOWChart();
+            populateTable();
+            
+            // 成功メッセージを表示
+            const alertElement = document.getElementById('ai-alert');
+            alertElement.className = 'alert alert-success';
+            alertElement.textContent = '日付範囲が更新されました。販売予測データを再計算しています。';
+            
+            // 3秒後に元のアラートに戻す
+            setTimeout(updateAlertMessage, 3000);
+        }
+        
+        // アラートメッセージの更新
+        function updateAlertMessage() {
+            const alertElement = document.getElementById('ai-alert');
+            const productName = productData[currentProduct].name;
+            
+            alertElement.className = 'alert alert-warning';
+            alertElement.textContent = `AIモデルアラート：明日（4/30）の${productName}販売は、5月連休前のため通常火曜日より40%増加が予測されます。製造・仕入れ量の調整を推奨します。`;
+        }
+    </script>
+</body>
+</html>
